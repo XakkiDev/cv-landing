@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 /** WebGL paper material. Two sides share the same ageing, only the inside is printed. */
-export function createPaperMaterial({ texture = null, side, width, length, aging = .32, fiber = .18 }) {
+export function createPaperMaterial({ texture = null, side, width, length, aging = .52, fiber = .30 }) {
   const material = new THREE.MeshStandardMaterial({
     map: texture, color: texture ? 0xfff8e9 : 0xe8d4ae,
     side, roughness: .96, metalness: 0,
@@ -29,8 +29,9 @@ export function createPaperMaterial({ texture = null, side, width, length, aging
         vec2 paperPoint = paperUv * paperSize;
         float stains = paperNoise(paperPoint * 5.1) * .65 + paperNoise(paperPoint * 13.0) * .35;
         float fibers = paperNoise(paperPoint * vec2(210.0, 26.0));
+        float fine = paperNoise(paperPoint * vec2(430.0, 85.0));
         float edge = 1.0 - smoothstep(0.0, .055, min(paperUv.x, 1.0-paperUv.x));
-        float age = paperAging * ((stains-.5)*.18 - edge*.11) + paperFiber*(fibers-.5)*.13;
+        float age = paperAging * ((stains-.5)*.28 - edge*.14) + paperFiber*((fibers-.5)*.18 + (fine-.5)*.09);
         diffuseColor.rgb *= 1.0 + age;
         diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(1.0,.94,.82), edge * paperAging * .38);`);
   };

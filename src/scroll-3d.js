@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
 import html2canvas from 'html2canvas';
-import { sheetPoint } from './scroll-geometry.js';
+import { sheetPoint, scrollWindow } from './scroll-geometry.js';
 import { createPaperMaterial } from './paper-material.js';
 
 const clamp = THREE.MathUtils.clamp;
@@ -18,7 +18,7 @@ function saveState(state) { try { localStorage.setItem(stateKey, JSON.stringify(
 
 /** One continuous UV-mapped sheet. Positions are derived from its material coordinates. */
 class Scroll3D {
-  constructor({ scene, texture, length, width = 2, thickness = .002, core = .044 }) {
+  constructor({ scene, texture, length, width = 2, thickness = .004, core = .044 }) {
     Object.assign(this, { length, width, thickness, core });
     this.group = new THREE.Group(); scene.add(this.group);
     // The sampling interval tracks the tightest roll, so layers stay smooth.
@@ -108,21 +108,18 @@ async function start() {
     update();
   }
   function update() {
-    // A single roll starts at the leading edge. Once there is room for two
-    // rolls to sit apart, wind the blank leading margin into the upper roll.
-    const edgeProgress = ease(clamp((fraction-.18)/.25,0,1));
-    const visible = Math.min(length, viewportHeight * fraction);
-    const maxOffset = Math.max(0,length-viewportHeight-2*edgeLength);
-    offset=clamp(offset,0,maxOffset);
-    const top = Math.min(length, offset*fraction + edgeLength*edgeProgress);
-    const bottom = Math.min(length-edgeLength*edgeProgress,top+visible);
+    // A single roll starts at the leading edge; the second one starts
+    // winding only after both circular envelopes have room to separate.
+    const window = scrollWindow({length,viewport:viewportHeight,offset,progress:fraction,edge:edgeLength,core:scroll.core,thickness:scroll.thickness});
+    offset=window.offset;
+    const {top,bottom}=window;
     scroll.update(top,Math.max(top,bottom));
     const mobile=innerWidth<700;
     const closedY=-(innerHeight*(mobile?.19:.24))*(2/Math.min(794,innerWidth-32));
     scroll.group.position.y=closedY*(1-fraction)+fallHeight+(closing ? .65*(1-fraction) : 0);
     scroll.group.rotation.z=-.16*(1-fraction);
     scroll.group.rotation.x=.27*(1-fraction);
-    scroll.group.rotation.y=-.34*(1-fraction)-.04*fraction;
+    scroll.group.rotation.y=-.48*(1-fraction)-.04*fraction;
     scroll.group.scale.setScalar(.72+.28*fraction);
   }
   function animate(to, done) {

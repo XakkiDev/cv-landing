@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { rolledPoint, rollRadius, sheetPoint } from '../src/scroll-geometry.js';
+import { rolledPoint, rollRadius, sheetPoint, scrollWindow } from '../src/scroll-geometry.js';
 
 const core=.044, thickness=.002;
 
@@ -42,4 +42,16 @@ test('the spiral preserves paper length within the thin-sheet approximation', ()
     arc+=Math.hypot(p.along-previous.along,p.depth-previous.depth);previous=p;
   }
   assert.ok(Math.abs(arc-length)/length < .0001, `arc length ${arc}`);
+});
+
+
+test('roll envelopes stay apart while opening and closing at several offsets', () => {
+  const length=8,viewport=2,edge=.18,thickness=.004;
+  for(const offset of [0,1,3,5]) for(let step=0;step<=1000;step++) {
+    const {top,bottom}=scrollWindow({length,viewport,edge,core,thickness,offset,progress:step/1000});
+    if(top<=1e-12 || length-bottom<=1e-12)continue;
+    const a=rollRadius(top,core,thickness),b=rollRadius(length-bottom,core,thickness);
+    const centres=Math.hypot(bottom-top,a-b);
+    assert.ok(centres+1e-12>=a+b, `intersect at ${step}/1000 with offset ${offset}`);
+  }
 });

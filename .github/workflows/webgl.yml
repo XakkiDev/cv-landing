@@ -25,11 +25,22 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Exercise the scroll with software WebGL
         run: node scripts/check-webgl.mjs
-      - name: Save screenshots, video and diagnostics
+      - name: Save screenshots and diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: webgl-scroll-${{ github.run_id }}
-          path: test-results/
+          name: webgl-frames-${{ github.run_id }}
+          path: |
+            test-results/*.png
+            test-results/*.json
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Save video
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: webgl-video-${{ github.run_id }}
+          path: test-results/*.webm
           if-no-files-found: warn
           retention-days: 7
