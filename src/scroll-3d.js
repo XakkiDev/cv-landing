@@ -60,9 +60,9 @@ async function start() {
   const length = 2*capture.height/capture.width;
   const scroll = new Scroll3D({scene,texture:capture.texture,length});
   const edgeLength = 2*capture.leader/capture.width;
-  let viewportHeight = 1.5, open = false, busy = false, fraction = 0, offset = 0, animation = null, fallHeight = 0, closing = false;
+  let viewportHeight = 1.5, open = false, busy = false, fraction = 0, offset = 0, targetOffset = 0, animation = null, fallHeight = 0, closing = false, lastFrame = 0;
   // Temporary orientation tool: rotations are in radians, UI reports degrees.
-  const defaultOrientation = { x: THREE.MathUtils.degToRad(5), y: THREE.MathUtils.degToRad(-10), z: 0 };
+  const defaultOrientation = { x: THREE.MathUtils.degToRad(8), y: THREE.MathUtils.degToRad(8), z: 0 };
   const orientation = { ...defaultOrientation };
   const panel = document.createElement('aside');
   panel.className = 'rotation-panel'; panel.hidden = true;
@@ -118,7 +118,10 @@ async function start() {
     const closedY=-(innerHeight*(mobile?.19:.24))*(2/Math.min(794,innerWidth-32));
     scroll.group.position.y=closedY*(1-fraction)+fallHeight+(closing ? .65*(1-fraction) : 0);
     scroll.group.rotation.z=-.16*(1-fraction)+orientation.z*fraction;
-    scroll.group.rotation.x=.27*(1-fraction)+orientation.x*fraction;
+    // When closed, show the outside edge of the wound sheet to the camera;
+    // turn the same geometry into its readable orientation as it opens.
+    const closedTurn=1-ease(Math.min(1,fraction/.45));
+    scroll.group.rotation.x=.27*(1-fraction)+orientation.x*fraction+Math.PI*closedTurn;
     scroll.group.rotation.y=-.48*(1-fraction)+orientation.y*fraction;
     scroll.group.scale.setScalar(.72+.28*fraction);
   }
@@ -128,12 +131,12 @@ async function start() {
     cancelAnimationFrame(animation);animation=requestAnimationFrame(frame);
   }
   function show() {
-    if(busy||open)return;open=true;offset=0;
+    if(busy||open)return;open=true;offset=0;targetOffset=0;
     state.open=true;state.offset=0;saveState(state);panel.hidden=false;opening.classList.add('webgl-open');site.classList.remove('is-folded');site.inert=false;
     animate(1,()=>{foldButton.focus({preventScroll:true});});
   }
   function close() {
-    if(busy||!open)return;open=false;panel.hidden=true;closing=!reduced;state.open=false;state.offset=0;saveState(state);site.inert=true;site.classList.add('is-folded');
+    if(busy||!open)return;open=false;targetOffset=offset;panel.hidden=true;closing=!reduced;state.open=false;state.offset=0;saveState(state);site.inert=true;site.classList.add('is-folded');
     animate(0,()=>{
       if (reduced) {offset=0;opening.classList.remove('webgl-open');openButton.focus({preventScroll:true});return;}
       // Pre-simulate one small rigid body drop, then play those samples without a live world.
@@ -148,24 +151,37 @@ async function start() {
       requestAnimationFrame(drop);
     });
   }
-  function scrollBy(delta){if(!open||busy)return;offset=clamp(offset+delta*(2/capture.width),0,Math.max(0,length-viewportHeight-2*edgeLength));state.offset=offset;saveState(state);update();}
+  function setScrollTarget(value) {
+    targetOffset=clamp(value,0,Math.max(0,length-viewportHeight-2*edgeLength));
+    state.offset=targetOffset;saveState(state);
+    if(reduced){offset=targetOffset;update();}
+  }
+  function scrollBy(delta){if(!open||busy)return;setScrollTarget(targetOffset+delta*(2/capture.width));}
   window.addEventListener('resize',resize);
   openButton.addEventListener('click',show);skipButton.addEventListener('click',show);foldButton.hidden=false;foldButton.addEventListener('click',close);
   document.querySelector('.ambience').addEventListener('click',e=>{if(open&&!e.target.closest('a')&&!hitScroll(e))close();});
-  window.addEventListener('wheel',e=>{if(open&&!busy){e.preventDefault();scrollBy(e.deltaY);}}, {passive:false});
+  window.addEventListener('wheel',e=>{if(open&&!busy){e.preventDefault();scrollBy(e.deltaY * (e.deltaMode===1 ? 16 : e.deltaMode===2 ? innerHeight : 1));}}, {passive:false});
   let touchY=null;window.addEventListener('touchstart',e=>{if(open)touchY=e.touches[0].clientY;},{passive:true});
   window.addEventListener('touchmove',e=>{if(open&&touchY!==null){e.preventDefault();const y=e.touches[0].clientY;scrollBy(touchY-y);touchY=y;}},{passive:false});
   window.addEventListener('touchend',()=>touchY=null,{passive:true});
   document.addEventListener('keydown',e=>{if(!open)return;if(e.key==='Escape'){close();return;}let d=0;if(e.key==='ArrowDown')d=60;if(e.key==='ArrowUp')d=-60;if(e.key==='PageDown'||e.key===' ')d=innerHeight*.7;if(e.key==='PageUp')d=-innerHeight*.7;if(d){e.preventDefault();scrollBy(d);}});
-  document.querySelectorAll('.chapter-rail a').forEach(a=>a.addEventListener('click',e=>{e.preventDefault();const id=a.hash.slice(1);offset=clamp((capture.sections[id]||0)*2/capture.width-viewportHeight*.12,0,Math.max(0,length-viewportHeight-2*edgeLength));update();}));
+  document.querySelectorAll('.chapter-rail a').forEach(a=>a.addEventListener('click',e=>{e.preventDefault();const id=a.hash.slice(1);setScrollTarget((capture.sections[id]||0)*2/capture.width-viewportHeight*.12);}));
   // UV picking maps links to their original HTML coordinates.
-  window.addEventListener('click',e=>{if(!open||busy||e.target.closest('a,button'))return;const hit=hitScroll(e);if(!hit?.uv)return;const x=hit.uv.x*capture.width,y=(1-hit.uv.y)*capture.height;const link=capture.links.find(l=>x>=l.x&&x<=l.x+l.width&&y>=l.y&&y<=l.y+l.height);if(link){if(link.href.startsWith('#')){offset=clamp((capture.sections[link.href.slice(1)]||0)*2/capture.width,0,Math.max(0,length-viewportHeight-2*edgeLength));update();}else window.open(link.href,link.target||'_blank','noopener');}});
+  window.addEventListener('click',e=>{if(!open||busy||e.target.closest('a,button'))return;const hit=hitScroll(e);if(!hit?.uv)return;const x=hit.uv.x*capture.width,y=(1-hit.uv.y)*capture.height;const link=capture.links.find(l=>x>=l.x&&x<=l.x+l.width&&y>=l.y&&y<=l.y+l.height);if(link){if(link.href.startsWith('#')){setScrollTarget((capture.sections[link.href.slice(1)]||0)*2/capture.width);}else window.open(link.href,link.target||'_blank','noopener');}});
   document.documentElement.classList.add('has-scroll-3d');site.classList.add('is-folded');site.inert=true;opening.hidden=false;
   resize();
   // Draw the closed geometry before revealing the canvas, avoiding a flash
   // of the ordinary HTML document or an unpositioned mesh at startup.
   renderer.render(scene,camera);
   document.documentElement.classList.remove('scroll-loading');
-  function render(){renderer.render(scene,camera);requestAnimationFrame(render);}render();
+  function render(now=performance.now()){
+    const dt=Math.min(.05,Math.max(0,(now-lastFrame)/1000));lastFrame=now;
+    if(open&&!busy&&Math.abs(targetOffset-offset)>0.00001){
+      offset=THREE.MathUtils.damp(offset,targetOffset,10,dt);
+      if(Math.abs(targetOffset-offset)<0.0001)offset=targetOffset;
+      update();
+    }
+    renderer.render(scene,camera);requestAnimationFrame(render);
+  }render();
 }
 start().catch(error=>{console.error('3D scroll unavailable; using HTML reader',error);import(new URL('fallback.js', location.href).href).finally(()=>document.documentElement.classList.remove('scroll-loading'));});

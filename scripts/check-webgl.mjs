@@ -46,7 +46,7 @@ try {
   await page.waitForTimeout(1200); await page.screenshot({path:path.join(output,'04-open.png')});
   const angles = page.locator('.rotation-values');
   const beforeAngles = await angles.textContent();
-  assert.match(beforeAngles, /X:\s*5\.0°.*Y:\s*-10\.0°.*Z:\s*0\.0°/, 'Default orientation must match the requested angles');
+  assert.match(beforeAngles, /X:\s*8\.0°.*Y:\s*8\.0°.*Z:\s*0\.0°/, 'Default orientation must match the requested angles');
   await page.mouse.move(680, 450); await page.mouse.down({button:'right'});
   await page.mouse.move(760, 490, {steps:8}); await page.mouse.up({button:'right'});
   const afterAngles = await angles.textContent();

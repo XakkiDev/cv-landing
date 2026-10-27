@@ -55,12 +55,16 @@ export class Scroll3D {
       const dy=points[next]-points[prev],dz=points[next+1]-points[prev+1];
       const inv=1/(Math.hypot(dy,dz)||1),ny=dz*inv,nz=dy*inv;
       const y=-(points[i*2]-middle),z=points[i*2+1];
+      // Worn deckled edges remain part of the geometry as the sheet winds.
+      const s=this.length*i/this.rows;
+      const left=-this.width/2 + .0035*(1+Math.sin(s*31)+.45*Math.sin(s*79+1.2));
+      const right=this.width/2 - .0035*(1+Math.sin(s*29+2)+.45*Math.sin(s*83));
       const fy=y+ny*half,fz=z+nz*half,by=y-ny*half,bz=z-nz*half;
-      front.setXYZ(i*2,-this.width/2,fy,fz);front.setXYZ(i*2+1,this.width/2,fy,fz);
-      back.setXYZ(i*2,-this.width/2,by,bz);back.setXYZ(i*2+1,this.width/2,by,bz);
+      front.setXYZ(i*2,left,fy,fz);front.setXYZ(i*2+1,right,fy,fz);
+      back.setXYZ(i*2,left,by,bz);back.setXYZ(i*2+1,right,by,bz);
       normals.setXYZ(i*2,0,ny,nz);normals.setXYZ(i*2+1,0,ny,nz);
-      sides.setXYZ(i*4,-this.width/2,fy,fz);sides.setXYZ(i*4+1,-this.width/2,by,bz);
-      sides.setXYZ(i*4+2,this.width/2,fy,fz);sides.setXYZ(i*4+3,this.width/2,by,bz);
+      sides.setXYZ(i*4,left,fy,fz);sides.setXYZ(i*4+1,left,by,bz);
+      sides.setXYZ(i*4+2,right,fy,fz);sides.setXYZ(i*4+3,right,by,bz);
     }
     front.needsUpdate=true;back.needsUpdate=true;normals.needsUpdate=true;sides.needsUpdate=true;
     this.geometry.computeBoundingSphere();this.backGeometry.computeBoundingSphere();this.sideGeometry.computeBoundingSphere();
