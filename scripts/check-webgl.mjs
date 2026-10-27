@@ -58,7 +58,12 @@ try {
   await page.screenshot({path:path.join(output,'04b-rotated.png')});
   let saved = await page.evaluate(key => JSON.parse(localStorage.getItem(key)),stateKey);
   assert.equal(saved?.open, true, 'Opening must save open state');
+  const sheet = page.locator('canvas.scroll-webgl');
+  const beforeRolls = await sheet.evaluate(el => ({upper:Number(el.dataset.upperRoll),lower:Number(el.dataset.lowerRoll)}));
   await page.mouse.move(680, 450); await page.mouse.wheel(0, 700); await page.waitForTimeout(500);
+  const afterRolls = await sheet.evaluate(el => ({upper:Number(el.dataset.upperRoll),lower:Number(el.dataset.lowerRoll)}));
+  assert.ok(afterRolls.upper > beforeRolls.upper, 'The upper roll must grow when scrolling down');
+  assert.ok(afterRolls.lower < beforeRolls.lower, 'The lower roll must unwind when scrolling down');
   await page.screenshot({path:path.join(output,'05-scrolled.png')});
   saved = await page.evaluate(key => JSON.parse(localStorage.getItem(key)),stateKey);
   assert.ok(saved.offset > 0, 'Scrolling must update saved offset');

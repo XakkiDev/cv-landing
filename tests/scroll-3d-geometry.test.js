@@ -55,3 +55,16 @@ test('roll envelopes stay apart while opening and closing at several offsets', (
     assert.ok(centres+1e-12>=a+b, `intersect at ${step}/1000 with offset ${offset}`);
   }
 });
+
+
+test('scrolling transfers sheet length from the lower roll to the upper roll', () => {
+  const options={length:10,viewport:2,edge:.05,core,thickness:.004,progress:1};
+  const start=scrollWindow({...options,offset:0});
+  const middle=scrollWindow({...options,offset:2});
+  const last=scrollWindow({...options,offset:5});
+  assert.ok(start.top>0 && start.top<core*1.3, 'leading edge starts slightly bent');
+  assert.ok(middle.top>start.top && last.top>middle.top);
+  assert.ok(options.length-middle.bottom<options.length-start.bottom);
+  assert.ok(options.length-last.bottom<options.length-middle.bottom);
+  for(const position of [start,middle,last]) assert.ok(Math.abs((position.bottom-position.top)-options.viewport)<1e-10);
+});

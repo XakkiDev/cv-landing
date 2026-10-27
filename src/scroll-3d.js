@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
 import html2canvas from 'html2canvas';
-import { sheetPoint, scrollWindow } from './scroll-geometry.js';
-import { createPaperMaterial } from './paper-material.js';
+import { scrollWindow, rollRadius } from './scroll-geometry.js';
+import { Scroll3D } from './scroll-mesh.js';
 
 const clamp = THREE.MathUtils.clamp;
 const ease = t => t * t * (3 - 2 * t);
@@ -15,53 +15,6 @@ function readState() {
   return { broken: false, fragments: [], wasOpened: false, open: false, offset: 0 };
 }
 function saveState(state) { try { localStorage.setItem(stateKey, JSON.stringify(state)); } catch (_) {} }
-
-/** One continuous UV-mapped sheet. Positions are derived from its material coordinates. */
-class Scroll3D {
-  constructor({ scene, texture, length, width = 2, thickness = .004, core = .044 }) {
-    Object.assign(this, { length, width, thickness, core });
-    this.group = new THREE.Group(); scene.add(this.group);
-    // The sampling interval tracks the tightest roll, so layers stay smooth.
-    this.rows = Math.min(10000, Math.max(600, Math.ceil(length / .008)));
-    const vertices = new Float32Array((this.rows + 1) * 2 * 3);
-    const uv = new Float32Array((this.rows + 1) * 2 * 2);
-    const indices = [];
-    for (let i = 0; i <= this.rows; i++) {
-      const v = i / this.rows;
-      uv.set([0, 1 - v, 1, 1 - v], i * 4);
-      if (i < this.rows) { const n = i * 2; indices.push(n,n+2,n+1,n+1,n+2,n+3); }
-    }
-    this.geometry = new THREE.BufferGeometry();
-    this.geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3).setUsage(THREE.DynamicDrawUsage));
-    this.geometry.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
-    this.geometry.setIndex(indices);
-    this.paper = new THREE.Mesh(this.geometry, createPaperMaterial({ texture, side: THREE.FrontSide, width, length }));
-    this.back = new THREE.Mesh(this.geometry, createPaperMaterial({ side: THREE.BackSide, width, length }));
-    this.group.add(this.paper, this.back);
-  }
-  update(top, bottom, progress = 1) {
-    top = clamp(top, 0, this.length); bottom = clamp(bottom, top, this.length);
-    const positions = this.geometry.attributes.position;
-    const middle = (top + bottom) / 2;
-    for (let i = 0; i <= this.rows; i++) {
-      const s = this.length * i / this.rows;
-      const p = sheetPoint(s, top, bottom, this.length, this.core, this.thickness);
-      positions.setXYZ(i * 2, -this.width / 2, -(p.y - middle), p.z);
-      positions.setXYZ(i * 2 + 1, this.width / 2, -(p.y - middle), p.z);
-    }
-    positions.needsUpdate = true; this.geometry.computeVertexNormals();
-    this.geometry.computeBoundingSphere();
-    // While open, expose only a shallow curl at either edge. The rest of the
-    // same sheet remains modelled but is outside the viewing window.
-    const smooth = ease(clamp((progress - .35) / .55, 0, 1));
-    const curl = this.core * 1.15;
-    const first = Math.max(0, top - curl) * smooth;
-    const last = this.length - Math.max(0, this.length - bottom - curl) * smooth;
-    const rowStart = Math.max(0, Math.floor(first / this.length * this.rows));
-    const rowEnd = Math.min(this.rows, Math.ceil(last / this.length * this.rows));
-    this.geometry.setDrawRange(rowStart * 6, Math.max(0, rowEnd - rowStart) * 6);
-  }
-}
 
 async function capturePaper(paper) {
   await document.fonts.ready;
@@ -147,7 +100,9 @@ async function start() {
     renderer.setSize(innerWidth,innerHeight,false);
     const px = Math.min(794,innerWidth-32), unit=2/px;
     camera.left=-innerWidth*unit/2;camera.right=innerWidth*unit/2;camera.top=innerHeight*unit/2;camera.bottom=-innerHeight*unit/2;camera.updateProjectionMatrix();
-    viewportHeight = Math.min(innerHeight-60,1100)*unit;
+    // Keep room for the true rolled ends rather than cutting them at the viewport.
+    const rollMargin=rollRadius(length,scroll.core,scroll.thickness)*2.15;
+    viewportHeight = Math.max(.25, Math.min(innerHeight-48,1100)*unit-rollMargin);
     update();
   }
   function update() {
@@ -156,7 +111,9 @@ async function start() {
     const window = scrollWindow({length,viewport:viewportHeight,offset,progress:fraction,edge:edgeLength,core:scroll.core,thickness:scroll.thickness});
     offset=window.offset;
     const {top,bottom}=window;
-    scroll.update(top,Math.max(top,bottom),fraction);
+    scroll.update(top,Math.max(top,bottom));
+    canvas.dataset.upperRoll = String(top);
+    canvas.dataset.lowerRoll = String(length-bottom);
     const mobile=innerWidth<700;
     const closedY=-(innerHeight*(mobile?.19:.24))*(2/Math.min(794,innerWidth-32));
     scroll.group.position.y=closedY*(1-fraction)+fallHeight+(closing ? .65*(1-fraction) : 0);
