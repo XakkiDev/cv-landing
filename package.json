@@ -1,0 +1,20 @@
+{
+  "name": "sluzhilaya-gramota",
+  "version": "1.0.0",
+  "dependencies": {
+    "@dimforge/rapier3d-compat": "^0.21.0",
+    "html2canvas": "^1.4.1",
+    "shaders": "4.0.5",
+    "three": "^0.186.1"
+  },
+  "scripts": {
+    "build": "esbuild src/paper-shader.js --bundle --minify --format=esm --target=es2022 --outfile=dist/paper-shader.bundle.js && esbuild src/scroll-3d.js --bundle --minify --format=esm --target=es2022 --outfile=dist/scroll-3d.bundle.js"
+  },
+  "license": "ISC",
+  "type": "module",
+  "devDependencies": {
+    "esbuild": "^0.28.2",
+    "playwright": "^1.64.1"
+  },
+  "private": true
+}

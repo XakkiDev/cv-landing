@@ -1,0 +1,8 @@
+/* Optional standalone core styles for PaperScroll; site-specific framing lives in style.css. */
+.scroll-shell{position:relative;overflow:hidden;--paper-color:#eee3ca;--paper-aging:.35;--curl-height:58px}
+.scroll-shell>.paper-scroll__content{width:100%;height:100%;overflow:auto;overscroll-behavior:contain;background-color:var(--paper-color);background-image:var(--paper-texture,none);background-size:256px 256px}
+.scroll-curl{position:absolute;left:0;right:0;height:var(--curl-height);overflow:hidden;pointer-events:none;z-index:3;background-color:var(--paper-color);background-image:var(--paper-texture,none);background-size:256px 256px}
+.scroll-curl--top{top:0}.scroll-curl--bottom{bottom:0}
+.scroll-curl__slice{position:absolute;left:0;right:0;overflow:hidden;transform-origin:top center;background-color:var(--paper-color);background-image:var(--paper-texture,none);background-size:256px 256px}
+.scroll-curl__slice>.scroll-curl__copy{position:absolute;top:0;left:0;max-width:none;will-change:transform;pointer-events:none}
+.scroll-curl__slice:after{content:"";position:absolute;inset:0;background:rgba(84,56,27,var(--slice-shade));pointer-events:none}
