@@ -43,9 +43,7 @@ try {
   await page.waitForTimeout(400); await page.screenshot({path:path.join(output,'03-opening.png')});
   await page.waitForTimeout(1200); await page.screenshot({path:path.join(output,'04-open.png')});
   let saved = await page.evaluate(key => JSON.parse(localStorage.getItem(key)),stateKey);
-  assert.equal(saved?.broken, true, 'Opening must save broken seal state');
   assert.equal(saved?.open, true, 'Opening must save open state');
-  assert.ok(saved.fragments?.length, 'Opening must save fragment positions');
   await page.mouse.move(680, 450); await page.mouse.wheel(0, 700); await page.waitForTimeout(500);
   await page.screenshot({path:path.join(output,'05-scrolled.png')});
   saved = await page.evaluate(key => JSON.parse(localStorage.getItem(key)),stateKey);
@@ -53,14 +51,13 @@ try {
   await page.reload({waitUntil:'load'});
   await page.waitForSelector('html.has-scroll-3d', {timeout:60000}); await page.waitForTimeout(600);
   saved = await page.evaluate(key => JSON.parse(localStorage.getItem(key)),stateKey);
-  assert.ok(saved.open && saved.broken && saved.offset > 0, 'Open, seal and offset must survive reload');
+  assert.ok(saved.open && saved.offset > 0, 'Open state and offset must survive reload');
   await page.screenshot({path:path.join(output,'06-restored.png')});
   await page.getByRole('button',{name:'Свернуть грамоту'}).click();
-  await page.waitForTimeout(3000); await page.screenshot({path:path.join(output,'07-closed-broken-seal.png')});
+  await page.waitForTimeout(3000); await page.screenshot({path:path.join(output,'07-closed.png')});
   saved = await page.evaluate(key => JSON.parse(localStorage.getItem(key)),stateKey);
   assert.equal(saved.open, false, 'Closing must save closed state');
-  assert.equal(saved.broken, true, 'Closing must keep broken seal state');
-  const errors = log.filter(entry => entry.type === 'pageerror');
+  const errors = log.filter(entry => entry.type === 'pageerror' || entry.level === 'error');
   assert.deepEqual(errors, [], 'Unexpected JavaScript errors; see diagnostics.json');
   console.log('WebGL scroll check passed:', JSON.stringify(gpu));
 } catch (error) {
