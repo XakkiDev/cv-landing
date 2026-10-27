@@ -39,7 +39,7 @@ class Scroll3D {
     this.back = new THREE.Mesh(this.geometry, createPaperMaterial({ side: THREE.BackSide, width, length }));
     this.group.add(this.paper, this.back);
   }
-  update(top, bottom) {
+  update(top, bottom, progress = 1) {
     top = clamp(top, 0, this.length); bottom = clamp(bottom, top, this.length);
     const positions = this.geometry.attributes.position;
     const middle = (top + bottom) / 2;
@@ -51,6 +51,15 @@ class Scroll3D {
     }
     positions.needsUpdate = true; this.geometry.computeVertexNormals();
     this.geometry.computeBoundingSphere();
+    // While open, expose only a shallow curl at either edge. The rest of the
+    // same sheet remains modelled but is outside the viewing window.
+    const smooth = ease(clamp((progress - .35) / .55, 0, 1));
+    const curl = this.core * 1.15;
+    const first = Math.max(0, top - curl) * smooth;
+    const last = this.length - Math.max(0, this.length - bottom - curl) * smooth;
+    const rowStart = Math.max(0, Math.floor(first / this.length * this.rows));
+    const rowEnd = Math.min(this.rows, Math.ceil(last / this.length * this.rows));
+    this.geometry.setDrawRange(rowStart * 6, Math.max(0, rowEnd - rowStart) * 6);
   }
 }
 
@@ -62,7 +71,7 @@ async function capturePaper(paper) {
   copy.style.width = width + 'px';
   document.body.append(copy);
   const height = copy.scrollHeight;
-  const leader = Math.round(width * .09);
+  const leader = Math.round(width * .025);
   // Stay below common WebGL max texture dimensions; keep aspect ratio.
   const scale = Math.min(1.5, 8192 / (height + 2*leader), 4096 / width);
   const links = [...copy.querySelectorAll('a[href]')].map(a => ({ href:a.getAttribute('href'), target:a.target, x:a.offsetLeft, y:0, width:0, height:0, element:a }));
@@ -88,6 +97,7 @@ async function start() {
   await RAPIER.init();
   const capture = await capturePaper(paper);
   const state = readState();
+  state.open = false; state.offset = 0; saveState(state);
   const canvas = document.createElement('canvas'); canvas.className = 'scroll-webgl'; canvas.setAttribute('aria-hidden','true'); document.body.append(canvas);
   const renderer = new THREE.WebGLRenderer({canvas, alpha:true, antialias:true}); renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.setClearColor(0,0);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -98,8 +108,39 @@ async function start() {
   const scroll = new Scroll3D({scene,texture:capture.texture,length});
   const edgeLength = 2*capture.leader/capture.width;
   let viewportHeight = 1.5, open = false, busy = false, fraction = 0, offset = 0, animation = null, fallHeight = 0, closing = false;
+  // Temporary orientation tool: rotations are in radians, UI reports degrees.
+  const orientation = { x: 0, y: -.04, z: 0 };
+  const panel = document.createElement('aside');
+  panel.className = 'rotation-panel'; panel.hidden = true;
+  panel.setAttribute('aria-label', 'Поворот грамоты');
+  panel.innerHTML = '<span class="rotation-hint">Поворот: зажмите правую кнопку мыши</span><output class="rotation-values"></output><div class="rotation-buttons"><button type="button" data-axis="x" data-step="-1" aria-label="Наклонить вверх">↑</button><button type="button" data-axis="x" data-step="1" aria-label="Наклонить вниз">↓</button><button type="button" data-axis="y" data-step="-1" aria-label="Повернуть влево">←</button><button type="button" data-axis="y" data-step="1" aria-label="Повернуть вправо">→</button><button type="button" data-reset="true">Сбросить</button></div>';
+  document.body.append(panel);
+  const values = panel.querySelector('.rotation-values');
+  function showAngles() { values.textContent = ['x','y','z'].map(axis => `${axis.toUpperCase()}: ${(orientation[axis]*180/Math.PI).toFixed(1)}°`).join('  ·  '); }
+  function setOrientation(axis, value) { orientation[axis] = clamp(value, -.7, .7); showAngles(); update(); }
+  showAngles();
+  panel.addEventListener('click', event => {
+    const button=event.target.closest('button'); if(!button)return;
+    if(button.dataset.reset) { orientation.x=0;orientation.y=-.04;orientation.z=0;showAngles();update(); }
+    else if(button.dataset.axis) setOrientation(button.dataset.axis, orientation[button.dataset.axis] + Number(button.dataset.step) * Math.PI / 60);
+  });
+  let drag = null, suppressContext = false;
+  window.addEventListener('pointerdown', event => {
+    if(event.button!==2 || !open || busy || event.target.closest('button,a,.rotation-panel') || !hitScroll(event))return;
+    drag={id:event.pointerId,x:event.clientX,y:event.clientY};suppressContext=true;
+    event.target.setPointerCapture?.(event.pointerId);event.preventDefault();
+  });
+  window.addEventListener('pointermove', event => {
+    if(!drag || event.pointerId!==drag.id)return;
+    const dx=event.clientX-drag.x,dy=event.clientY-drag.y;drag.x=event.clientX;drag.y=event.clientY;
+    orientation.y=clamp(orientation.y+dx*.002,-.7,.7);orientation.x=clamp(orientation.x+dy*.002,-.7,.7);
+    showAngles();update();event.preventDefault();
+  });
+  window.addEventListener('pointerup', event => { if(drag?.id===event.pointerId){drag=null;setTimeout(()=>suppressContext=false,500);} });
+  window.addEventListener('pointercancel',()=>{drag=null;suppressContext=false;});
+  window.addEventListener('contextmenu', event => {if(suppressContext || (open && hitScroll(event)))event.preventDefault();});
   const ray=new THREE.Raycaster(),pointer=new THREE.Vector2();
-  function hitScroll(event) { pointer.set(event.clientX/innerWidth*2-1,-event.clientY/innerHeight*2+1); ray.setFromCamera(pointer,camera); return ray.intersectObject(scroll.paper)[0]; }
+  function hitScroll(event) { pointer.set(event.clientX/innerWidth*2-1,-event.clientY/innerHeight*2+1); ray.setFromCamera(pointer,camera); return ray.intersectObjects([scroll.paper,scroll.back])[0]; }
   function resize() {
     renderer.setSize(innerWidth,innerHeight,false);
     const px = Math.min(794,innerWidth-32), unit=2/px;
@@ -113,13 +154,13 @@ async function start() {
     const window = scrollWindow({length,viewport:viewportHeight,offset,progress:fraction,edge:edgeLength,core:scroll.core,thickness:scroll.thickness});
     offset=window.offset;
     const {top,bottom}=window;
-    scroll.update(top,Math.max(top,bottom));
+    scroll.update(top,Math.max(top,bottom),fraction);
     const mobile=innerWidth<700;
     const closedY=-(innerHeight*(mobile?.19:.24))*(2/Math.min(794,innerWidth-32));
     scroll.group.position.y=closedY*(1-fraction)+fallHeight+(closing ? .65*(1-fraction) : 0);
-    scroll.group.rotation.z=-.16*(1-fraction);
-    scroll.group.rotation.x=.27*(1-fraction);
-    scroll.group.rotation.y=-.48*(1-fraction)-.04*fraction;
+    scroll.group.rotation.z=-.16*(1-fraction)+orientation.z*fraction;
+    scroll.group.rotation.x=.27*(1-fraction)+orientation.x*fraction;
+    scroll.group.rotation.y=-.48*(1-fraction)+orientation.y*fraction;
     scroll.group.scale.setScalar(.72+.28*fraction);
   }
   function animate(to, done) {
@@ -129,11 +170,11 @@ async function start() {
   }
   function show() {
     if(busy||open)return;open=true;offset=0;
-    state.open=true;state.offset=0;saveState(state);opening.classList.add('webgl-open');site.classList.remove('is-folded');site.inert=false;
+    state.open=true;state.offset=0;saveState(state);panel.hidden=false;opening.classList.add('webgl-open');site.classList.remove('is-folded');site.inert=false;
     animate(1,()=>{foldButton.focus({preventScroll:true});});
   }
   function close() {
-    if(busy||!open)return;open=false;closing=!reduced;state.open=false;state.offset=0;saveState(state);site.inert=true;site.classList.add('is-folded');
+    if(busy||!open)return;open=false;panel.hidden=true;closing=!reduced;state.open=false;state.offset=0;saveState(state);site.inert=true;site.classList.add('is-folded');
     animate(0,()=>{
       if (reduced) {offset=0;opening.classList.remove('webgl-open');openButton.focus({preventScroll:true});return;}
       // Pre-simulate one small rigid body drop, then play those samples without a live world.
@@ -162,7 +203,10 @@ async function start() {
   window.addEventListener('click',e=>{if(!open||busy||e.target.closest('a,button'))return;const hit=hitScroll(e);if(!hit?.uv)return;const x=hit.uv.x*capture.width,y=(1-hit.uv.y)*capture.height;const link=capture.links.find(l=>x>=l.x&&x<=l.x+l.width&&y>=l.y&&y<=l.y+l.height);if(link){if(link.href.startsWith('#')){offset=clamp((capture.sections[link.href.slice(1)]||0)*2/capture.width,0,Math.max(0,length-viewportHeight-2*edgeLength));update();}else window.open(link.href,link.target||'_blank','noopener');}});
   document.documentElement.classList.add('has-scroll-3d');site.classList.add('is-folded');site.inert=true;opening.hidden=false;
   resize();
-  if(state.open) { open=true;fraction=1;offset=clamp(Number(state.offset)||0,0,Math.max(0,length-viewportHeight-2*edgeLength));opening.classList.add('webgl-open');site.classList.remove('is-folded');site.inert=false;update(); }
+  // Draw the closed geometry before revealing the canvas, avoiding a flash
+  // of the ordinary HTML document or an unpositioned mesh at startup.
+  renderer.render(scene,camera);
+  document.documentElement.classList.remove('scroll-loading');
   function render(){renderer.render(scene,camera);requestAnimationFrame(render);}render();
 }
-start().catch(error=>{console.error('3D scroll unavailable; using HTML reader',error);import(new URL('fallback.js', location.href).href);});
+start().catch(error=>{console.error('3D scroll unavailable; using HTML reader',error);import(new URL('fallback.js', location.href).href).finally(()=>document.documentElement.classList.remove('scroll-loading'));});

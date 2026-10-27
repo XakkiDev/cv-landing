@@ -64,16 +64,10 @@ foldButton.addEventListener('click', fold);
 document.querySelector('.ambience').addEventListener('click', event => {
   if (!event.target.closest('a') && intro.hidden) fold();
 });
-if (!location.hash && !motion.matches) {
-  intro.hidden = false;
-  site.inert = true;
-  site.classList.add('is-folded');
-} else if (location.hash) {
-  requestAnimationFrame(() => {
-    const target = document.getElementById(decodeURIComponent(location.hash.slice(1)));
-    if (target) simulation.goTo(target, 'instant');
-  });
-}
+// Always start folded, even when a previous session or URL has a hash.
+intro.hidden = false;
+site.inert = true;
+site.classList.add('is-folded');
 motion.addEventListener?.('change', event => { if (event.matches && !intro.hidden) reveal(true); });
 const links = Array.from(document.querySelectorAll('.chapter-rail a[href^="#"]'));
 const sections = links.map(link => document.getElementById(link.hash.slice(1)));

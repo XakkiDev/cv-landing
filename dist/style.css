@@ -154,3 +154,9 @@ body{font-family:Literata,Georgia,serif;line-height:1.55}
 .has-scroll-3d .opening.webgl-open{visibility:hidden}
 .texture-source{position:fixed!important;left:-10000px!important;top:0!important;height:auto!important;max-height:none!important;overflow:visible!important;z-index:-100!important;box-shadow:none!important;background:#eee3ca!important;pointer-events:none!important}
 .texture-source:before{display:none}.texture-source .paper-inner:before{content:"";position:absolute;inset:16px;pointer-events:none;background:url('border.svg') left top / 38px 121px repeat-y,url('border.svg') right top / 38px 121px repeat-y;border-top:1px solid #aa8e65;border-bottom:1px solid #aa8e65}
+/* Compact title area on the texture, leaving the first line close to the curl. */
+.texture-source .crest{height:30px;margin-bottom:0}
+.texture-source .paper-inner{padding-top:8px}
+.rotation-panel{position:fixed;left:16px;bottom:16px;z-index:8;display:grid;gap:5px;max-width:calc(100vw - 32px);padding:10px 12px;border:1px solid #e1c89a66;border-radius:8px;color:#fff0d4;background:#302016e8;box-shadow:0 4px 14px #1a0e0855;font:12px/1.35 Literata,Georgia,serif;pointer-events:auto}
+.rotation-panel[hidden]{display:none}.rotation-values{font:13px/1.4 ui-monospace,monospace;user-select:text}.rotation-buttons{display:flex;gap:5px}.rotation-buttons button{min-width:29px;height:27px;border:1px solid #e1c89a77;border-radius:4px;color:inherit;background:#f5e0bd18;cursor:pointer}.rotation-buttons button:last-child{padding:0 9px;font:11px Literata,Georgia,serif}.rotation-buttons button:hover{background:#f5e0bd44}
+@media(max-width:700px){.rotation-panel{left:8px;bottom:8px;font-size:10px}.rotation-hint{max-width:190px}.rotation-values{font-size:11px}.rotation-buttons button{height:25px}}
