@@ -109,7 +109,8 @@ async function start() {
   const edgeLength = 2*capture.leader/capture.width;
   let viewportHeight = 1.5, open = false, busy = false, fraction = 0, offset = 0, animation = null, fallHeight = 0, closing = false;
   // Temporary orientation tool: rotations are in radians, UI reports degrees.
-  const orientation = { x: 0, y: -.04, z: 0 };
+  const defaultOrientation = { x: THREE.MathUtils.degToRad(5), y: THREE.MathUtils.degToRad(-10), z: 0 };
+  const orientation = { ...defaultOrientation };
   const panel = document.createElement('aside');
   panel.className = 'rotation-panel'; panel.hidden = true;
   panel.setAttribute('aria-label', 'Поворот грамоты');
@@ -121,7 +122,7 @@ async function start() {
   showAngles();
   panel.addEventListener('click', event => {
     const button=event.target.closest('button'); if(!button)return;
-    if(button.dataset.reset) { orientation.x=0;orientation.y=-.04;orientation.z=0;showAngles();update(); }
+    if(button.dataset.reset) { Object.assign(orientation, defaultOrientation); showAngles(); update(); }
     else if(button.dataset.axis) setOrientation(button.dataset.axis, orientation[button.dataset.axis] + Number(button.dataset.step) * Math.PI / 60);
   });
   let drag = null, suppressContext = false;

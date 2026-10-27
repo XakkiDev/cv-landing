@@ -46,12 +46,15 @@ try {
   await page.waitForTimeout(1200); await page.screenshot({path:path.join(output,'04-open.png')});
   const angles = page.locator('.rotation-values');
   const beforeAngles = await angles.textContent();
+  assert.match(beforeAngles, /X:\s*5\.0°.*Y:\s*-10\.0°.*Z:\s*0\.0°/, 'Default orientation must match the requested angles');
   await page.mouse.move(680, 450); await page.mouse.down({button:'right'});
   await page.mouse.move(760, 490, {steps:8}); await page.mouse.up({button:'right'});
   const afterAngles = await angles.textContent();
   assert.notEqual(afterAngles, beforeAngles, 'Right-button drag must change reported angles');
   await page.getByRole('button',{name:'Повернуть по часовой стрелке'}).click();
   assert.notEqual(await angles.textContent(), afterAngles, 'Z rotation control must update the reported angles');
+  await page.getByRole('button',{name:'Сбросить'}).click();
+  assert.equal(await angles.textContent(), beforeAngles, 'Reset must restore the requested orientation');
   await page.screenshot({path:path.join(output,'04b-rotated.png')});
   let saved = await page.evaluate(key => JSON.parse(localStorage.getItem(key)),stateKey);
   assert.equal(saved?.open, true, 'Opening must save open state');
