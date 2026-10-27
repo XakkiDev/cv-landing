@@ -113,7 +113,7 @@ async function start() {
   const panel = document.createElement('aside');
   panel.className = 'rotation-panel'; panel.hidden = true;
   panel.setAttribute('aria-label', 'Поворот грамоты');
-  panel.innerHTML = '<span class="rotation-hint">Поворот: зажмите правую кнопку мыши</span><output class="rotation-values"></output><div class="rotation-buttons"><button type="button" data-axis="x" data-step="-1" aria-label="Наклонить вверх">↑</button><button type="button" data-axis="x" data-step="1" aria-label="Наклонить вниз">↓</button><button type="button" data-axis="y" data-step="-1" aria-label="Повернуть влево">←</button><button type="button" data-axis="y" data-step="1" aria-label="Повернуть вправо">→</button><button type="button" data-reset="true">Сбросить</button></div>';
+  panel.innerHTML = '<span class="rotation-hint">Поворот: ПКМ · Shift + ПКМ — вращение</span><output class="rotation-values"></output><div class="rotation-buttons"><button type="button" data-axis="x" data-step="-1" aria-label="Наклонить вверх">↑</button><button type="button" data-axis="x" data-step="1" aria-label="Наклонить вниз">↓</button><button type="button" data-axis="y" data-step="-1" aria-label="Повернуть влево">←</button><button type="button" data-axis="y" data-step="1" aria-label="Повернуть вправо">→</button><button type="button" data-axis="z" data-step="-1" aria-label="Повернуть против часовой стрелки">↶</button><button type="button" data-axis="z" data-step="1" aria-label="Повернуть по часовой стрелке">↷</button><button type="button" data-reset="true">Сбросить</button></div>';
   document.body.append(panel);
   const values = panel.querySelector('.rotation-values');
   function showAngles() { values.textContent = ['x','y','z'].map(axis => `${axis.toUpperCase()}: ${(orientation[axis]*180/Math.PI).toFixed(1)}°`).join('  ·  '); }
@@ -133,7 +133,8 @@ async function start() {
   window.addEventListener('pointermove', event => {
     if(!drag || event.pointerId!==drag.id)return;
     const dx=event.clientX-drag.x,dy=event.clientY-drag.y;drag.x=event.clientX;drag.y=event.clientY;
-    orientation.y=clamp(orientation.y+dx*.002,-.7,.7);orientation.x=clamp(orientation.x+dy*.002,-.7,.7);
+    if(event.shiftKey) orientation.z=clamp(orientation.z+dx*.002,-.7,.7);
+    else {orientation.y=clamp(orientation.y+dx*.002,-.7,.7);orientation.x=clamp(orientation.x+dy*.002,-.7,.7);}
     showAngles();update();event.preventDefault();
   });
   window.addEventListener('pointerup', event => { if(drag?.id===event.pointerId){drag=null;setTimeout(()=>suppressContext=false,500);} });
