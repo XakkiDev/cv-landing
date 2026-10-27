@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { sheetPoint } from './scroll-geometry.js';
+import { sheetPoint, rolledPoint } from './scroll-geometry.js';
 import { createPaperMaterial } from './paper-material.js';
 const clamp = THREE.MathUtils.clamp;
 
@@ -47,7 +47,18 @@ export class Scroll3D {
     const front=this.geometry.attributes.position, back=this.backGeometry.attributes.position;
     const normals=this.geometry.attributes.normal, sides=this.sideGeometry.attributes.position;
     for(let i=0;i<=this.rows;i++) {
-      const p=sheetPoint(this.length*i/this.rows,top,bottom,this.length,this.core,this.thickness);
+      const distance=this.length*i/this.rows;
+      const p=sheetPoint(distance,top,bottom,this.length,this.core,this.thickness);
+      // A loose, worn outer edge lifts slightly off the wound surface. It is
+      // still part of the same sheet and settles as the scroll opens.
+      const closed=1-THREE.MathUtils.smoothstep(bottom-top,0,.32);
+      if(closed>0 && top<.001 && distance>=bottom && distance-bottom<.3) {
+        const arc=rolledPoint(distance-bottom,this.length-bottom,this.core,this.thickness);
+        const taper=1-THREE.MathUtils.smoothstep(distance-bottom,0,.3);
+        const lift=.026*closed*taper;
+        p.y+=lift*arc.along/arc.radius;
+        p.z+=lift*(arc.depth-arc.outer)/arc.radius;
+      }
       points[i*2]=p.y;points[i*2+1]=p.z;
     }
     for(let i=0;i<=this.rows;i++) {
