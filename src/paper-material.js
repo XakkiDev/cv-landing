@@ -26,7 +26,7 @@ function heightTile(width, length) {
 export function createPaperMaterial({ texture = null, side, width, length, aging = .52, fiber = .30 }) {
   const material = new THREE.MeshStandardMaterial({
     map: texture, color: texture ? 0xfff8e9 : 0xe8d4ae,
-    side, roughness: .96, metalness: 0, bumpMap: heightTile(width,length), bumpScale: .014,
+    side, roughness: .96, metalness: 0, bumpMap: heightTile(width,length), bumpScale: .007,
   });
   material.onBeforeCompile = shader => {
     shader.uniforms.paperSize = { value: new THREE.Vector2(width, length) };
@@ -52,16 +52,18 @@ export function createPaperMaterial({ texture = null, side, width, length, aging
         // The short ends are irregular, including more weathered corners.
         float endDistance = min(paperUv.y, 1.0-paperUv.y) * paperSize.y;
         float corner = 1.0-smoothstep(0.0,.12,min(paperUv.x,1.0-paperUv.x));
-        float wornCut = .0015 + paperNoise(vec2(paperUv.x*55.0, 1.7))*.004 + corner*.009;
+        float wornCut = .001 + paperNoise(vec2(paperUv.x*55.0, 1.7))*.002;
         if(endDistance < wornCut) discard;
         float stains = paperNoise(paperPoint * 5.1) * .65 + paperNoise(paperPoint * 13.0) * .35;
         float fibers = paperNoise(paperPoint * vec2(210.0, 26.0));
         float fine = paperNoise(paperPoint * vec2(430.0, 85.0));
         float edge = 1.0 - smoothstep(0.0, .055, min(paperUv.x, 1.0-paperUv.x));
-        float age = paperAging * ((stains-.5)*.28 - edge*.14) + paperFiber*((fibers-.5)*.18 + (fine-.5)*.09);
+        float tide = paperNoise(paperPoint * vec2(3.2, 2.1));
+        float mottledEdge = edge * (.42 + .58 * paperNoise(paperPoint * vec2(8.0, 4.0)));
+        float age = paperAging * ((stains-.5)*.28 - mottledEdge*.24 - edge*smoothstep(.38,.65,tide)*.10) + paperFiber*((fibers-.5)*.18 + (fine-.5)*.09);
         diffuseColor.rgb *= 1.0 + age;
-        diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(1.0,.94,.82), edge * paperAging * .38);`);
+        diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(1.0,.94,.82), mottledEdge * paperAging * .48);`);
   };
-  material.customProgramCacheKey = () => 'aged-scroll-paper-v2';
+  material.customProgramCacheKey = () => 'aged-scroll-paper-v3';
   return material;
 }

@@ -5,7 +5,7 @@ const clamp = THREE.MathUtils.clamp;
 
 /** One continuous UV-mapped sheet with two faces and physical side walls. */
 export class Scroll3D {
-  constructor({ scene, texture, length, width = 2, thickness = .004, core = .044, paperThickness = thickness * .7 }) {
+  constructor({ scene, texture, length, width = 2, thickness = .004, core = .0616, paperThickness = thickness * .7 }) {
     if (paperThickness <= 0 || paperThickness >= thickness) throw new RangeError('Paper thickness must be positive and smaller than the winding pitch');
     Object.assign(this, { length, width, thickness, core, paperThickness });
     this.group = new THREE.Group(); scene.add(this.group);
@@ -68,8 +68,12 @@ export class Scroll3D {
       const y=-(points[i*2]-middle),z=points[i*2+1];
       // Worn deckled edges remain part of the geometry as the sheet winds.
       const s=this.length*i/this.rows;
-      const left=-this.width/2 + .0035*(1+Math.sin(s*31)+.45*Math.sin(s*79+1.2));
-      const right=this.width/2 - .0035*(1+Math.sin(s*29+2)+.45*Math.sin(s*83));
+      // Broad irregular wear plus small deckling; rounded, asymmetric corners.
+      const end=Math.min(s,this.length-s);
+      const cornerRadius=.085;
+      const cornerInset=end<cornerRadius ? cornerRadius-Math.sqrt(Math.max(0,cornerRadius*cornerRadius-(cornerRadius-end)**2)) : 0;
+      const left=-this.width/2 + cornerInset*(.9+.1*Math.sin(s*19)) + .002*(1+Math.sin(s*12)+.4*Math.sin(s*47+1.2));
+      const right=this.width/2 - cornerInset*(1.08+.08*Math.sin(s*17)) - .002*(1+Math.sin(s*13+2)+.4*Math.sin(s*53));
       const fy=y+ny*half,fz=z+nz*half,by=y-ny*half,bz=z-nz*half;
       front.setXYZ(i*2,left,fy,fz);front.setXYZ(i*2+1,right,fy,fz);
       back.setXYZ(i*2,left,by,bz);back.setXYZ(i*2+1,right,by,bz);

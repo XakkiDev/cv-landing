@@ -20,7 +20,14 @@ async function capturePaper(paper) {
   await document.fonts.ready;
   const copy = paper.cloneNode(true);
   copy.removeAttribute('id'); copy.classList.add('texture-source');
-  const width = Math.min(794, Math.max(320, innerWidth - 32));
+  // Wider spaces survive rasterization of the very long mobile texture.
+  // Only the visual clone changes; semantic HTML and accessible text stay intact.
+  if (innerWidth < 700) {
+    const walker=document.createTreeWalker(copy,NodeFilter.SHOW_TEXT);
+    const nodes=[]; while(walker.nextNode()) nodes.push(walker.currentNode);
+    for(const node of nodes) if(node.nodeValue.trim()) node.nodeValue=node.nodeValue.replace(/ (?=\S)/g,'\u2002');
+  }
+  const width = (innerWidth < 700 ? Math.max(1, innerWidth - 20) : Math.min(954, innerWidth - 32));
   copy.style.width = width + 'px';
   document.body.append(copy);
   const height = copy.scrollHeight;
@@ -37,6 +44,13 @@ async function capturePaper(paper) {
   // Blank margins remain rolled up, so neither end becomes completely flat.
   const padded = document.createElement('canvas'); padded.width=canvas.width; padded.height=Math.ceil((height+2*leader)*scale);
   const ctx=padded.getContext('2d');ctx.fillStyle='#eee3ca';ctx.fillRect(0,0,padded.width,padded.height);ctx.drawImage(canvas,0,Math.round(leader*scale));
+  // A faint, uneven cup ring on the blank lower margin of the manuscript.
+  const ringX=padded.width*.79, ringY=padded.height-padded.width*.09, ringR=padded.width*.065;
+  ctx.save(); ctx.translate(ringX,ringY); ctx.rotate(-.16); ctx.scale(1,.82);
+  ctx.strokeStyle='rgba(111,65,33,.15)'; ctx.lineWidth=Math.max(1,3*scale);
+  ctx.beginPath();ctx.arc(0,0,ringR,.12,Math.PI*1.92);ctx.stroke();
+  ctx.strokeStyle='rgba(130,76,35,.08)';ctx.lineWidth=Math.max(1,1.5*scale);
+  ctx.beginPath();ctx.arc(2*scale,-scale,ringR*.95,.45,Math.PI*1.7);ctx.stroke();ctx.restore();
   links.forEach(link => link.y += leader);
   Object.keys(sections).forEach(key => sections[key] += leader);
   const texture = new THREE.CanvasTexture(padded); texture.colorSpace = THREE.SRGBColorSpace; texture.anisotropy = 4;
@@ -78,31 +92,47 @@ async function start() {
     if(button.dataset.reset) { Object.assign(orientation, defaultOrientation); showAngles(); update(); }
     else if(button.dataset.axis) setOrientation(button.dataset.axis, orientation[button.dataset.axis] + Number(button.dataset.step) * Math.PI / 60);
   });
+  const closedPose = {x:.0121,y:.3028,rx:19*Math.PI/180,ry:-27.5*Math.PI/180,rz:-2.4*Math.PI/180,scale:.495};
+  let debugVisible=false;
+  document.querySelector('#debug-toggle').addEventListener('click',()=>{debugVisible=!debugVisible; panel.hidden=!debugVisible||!open;posePanel.hidden=!debugVisible||open;});
+  const posePanel=document.createElement('aside');posePanel.className='rotation-panel closed-pose-panel';
+  posePanel.innerHTML='<span>Свиток: ПКМ — двигать · Ctrl+ПКМ — поворот<br>Ctrl+Alt+ПКМ: вверх — крупнее, вниз — мельче</span><output></output>';
+  document.body.append(posePanel);
+  function sceneSize(){const rect=document.querySelector('.ambience .scene').getBoundingClientRect();return {width:rect.width,height:rect.height};}
+  function showPose(){posePanel.querySelector('output').textContent=`От центра фона: X ${(closedPose.x*100).toFixed(2)}% · Y ${(closedPose.y*100).toFixed(2)}% (вниз) | RX ${(closedPose.rx*180/Math.PI).toFixed(1)}° · RY ${(closedPose.ry*180/Math.PI).toFixed(1)}° · RZ ${(closedPose.rz*180/Math.PI).toFixed(1)}° | Масштаб ${closedPose.scale.toFixed(3)}`;}
+  showPose();
   let drag = null, suppressContext = false;
   window.addEventListener('pointerdown', event => {
-    if(event.button!==2 || !open || busy || event.target.closest('button,a,.rotation-panel') || !hitScroll(event))return;
+    if(event.button!==2 || busy || event.target.closest('.rotation-panel') || (open && (event.target.closest('button,a') || !hitScroll(event))))return;
     drag={id:event.pointerId,x:event.clientX,y:event.clientY};suppressContext=true;
     event.target.setPointerCapture?.(event.pointerId);event.preventDefault();
   });
   window.addEventListener('pointermove', event => {
     if(!drag || event.pointerId!==drag.id)return;
     const dx=event.clientX-drag.x,dy=event.clientY-drag.y;drag.x=event.clientX;drag.y=event.clientY;
+    if(!open){
+      if(event.ctrlKey && event.altKey) closedPose.scale=clamp(closedPose.scale*Math.exp(-dy*.008),.1,4);
+      else if(event.ctrlKey){closedPose.rz+=dx*.005;closedPose.rx+=dy*.005;}
+      else {const size=sceneSize();closedPose.x+=dx/size.width;closedPose.y+=dy/size.height;}
+      showPose();update();event.preventDefault();return;
+    }
     if(event.shiftKey) orientation.z=clamp(orientation.z+dx*.002,-.7,.7);
     else {orientation.y=clamp(orientation.y+dx*.002,-.7,.7);orientation.x=clamp(orientation.x+dy*.002,-.7,.7);}
     showAngles();update();event.preventDefault();
   });
   window.addEventListener('pointerup', event => { if(drag?.id===event.pointerId){drag=null;setTimeout(()=>suppressContext=false,500);} });
   window.addEventListener('pointercancel',()=>{drag=null;suppressContext=false;});
-  window.addEventListener('contextmenu', event => {if(suppressContext || (open && hitScroll(event)))event.preventDefault();});
+  window.addEventListener('contextmenu', event => {if(suppressContext || (!open || hitScroll(event)))event.preventDefault();});
   const ray=new THREE.Raycaster(),pointer=new THREE.Vector2();
   function hitScroll(event) { pointer.set(event.clientX/innerWidth*2-1,-event.clientY/innerHeight*2+1); ray.setFromCamera(pointer,camera); return ray.intersectObjects([scroll.paper,scroll.back])[0]; }
   function resize() {
     renderer.setSize(innerWidth,innerHeight,false);
-    const px = Math.min(794,innerWidth-32), unit=2/px;
+    const mobile=innerWidth<700;
+    const px = mobile ? Math.max(1,innerWidth-20) : Math.min(954,innerWidth-32), unit=2/px;
     camera.left=-innerWidth*unit/2;camera.right=innerWidth*unit/2;camera.top=innerHeight*unit/2;camera.bottom=-innerHeight*unit/2;camera.updateProjectionMatrix();
     // Keep room for the true rolled ends rather than cutting them at the viewport.
     const rollMargin=rollRadius(length,scroll.core,scroll.thickness)*2.15;
-    viewportHeight = Math.max(.25, Math.min(innerHeight-48,1100)*unit-rollMargin);
+    viewportHeight = Math.max(.25, (innerHeight-20)*unit-rollMargin);
     update();
   }
   function update() {
@@ -115,15 +145,35 @@ async function start() {
     canvas.dataset.upperRoll = String(top);
     canvas.dataset.lowerRoll = String(length-bottom);
     const mobile=innerWidth<700;
-    const closedY=-(innerHeight*(mobile?.19:.24))*(2/Math.min(794,innerWidth-32));
+    const unit=(camera.right-camera.left)/innerWidth;
+    const size=sceneSize();
+    const closedY=-size.height*closedPose.y*unit;
+    posePanel.hidden=!debugVisible||open;
+    scroll.group.position.x=size.width*closedPose.x*unit*(1-fraction);
     scroll.group.position.y=closedY*(1-fraction)+fallHeight+(closing ? .65*(1-fraction) : 0);
-    scroll.group.rotation.z=-.16*(1-fraction)+orientation.z*fraction;
+    scroll.group.rotation.z=closedPose.rz*(1-fraction)+(mobile?0:orientation.z)*fraction;
     // When closed, show the outside edge of the wound sheet to the camera;
     // turn the same geometry into its readable orientation as it opens.
     const closedTurn=1-ease(Math.min(1,fraction/.45));
-    scroll.group.rotation.x=.27*(1-fraction)+orientation.x*fraction+Math.PI*closedTurn;
-    scroll.group.rotation.y=-.48*(1-fraction)+orientation.y*fraction;
-    scroll.group.scale.setScalar(.72+.28*fraction);
+    scroll.group.rotation.x=closedPose.rx*(1-fraction)+(mobile?0:orientation.x)*fraction+Math.PI*closedTurn;
+    scroll.group.rotation.y=closedPose.ry*(1-fraction)+(mobile?0:orientation.y)*fraction;
+    scroll.group.scale.setScalar(closedPose.scale*(size.width*794/1920)*(unit/2)*(1-fraction)+fraction);
+    // Fit the projected rolled sheet into the requested vertical space. Use
+    // the actual mesh, including rotation and roll thickness, not a fixed cap.
+    if (fraction === 1 && open) {
+      const target=(innerHeight-20)*unit;
+      const q=scroll.group.quaternion, point=new THREE.Vector3();
+      for(let pass=0;pass<3;pass++) {
+        const attr=scroll.geometry.attributes.position;
+        let min=Infinity,max=-Infinity;
+        for(let i=0;i<attr.count;i++) {point.fromBufferAttribute(attr,i).applyQuaternion(q);min=Math.min(min,point.y);max=Math.max(max,point.y);}
+        const delta=target-(max-min);
+        if(pass===2 || Math.abs(delta)<unit*.5){scroll.group.position.y=-(min+max)/2;break;}
+        viewportHeight=Math.max(.25,Math.min(length,viewportHeight+delta/Math.max(.3,Math.cos(mobile ? 0 : orientation.x))));
+        const fitted=scrollWindow({length,viewport:viewportHeight,offset,progress:1,edge:edgeLength,core:scroll.core,thickness:scroll.thickness});
+        offset=fitted.offset;scroll.update(fitted.top,fitted.bottom);
+      }
+    }
   }
   function animate(to, done) {
     const from=fraction, start=performance.now(), duration=reduced?0:1000;busy=true;
@@ -132,7 +182,7 @@ async function start() {
   }
   function show() {
     if(busy||open)return;open=true;offset=0;targetOffset=0;
-    state.open=true;state.offset=0;saveState(state);panel.hidden=false;opening.classList.add('webgl-open');site.classList.remove('is-folded');site.inert=false;
+    state.open=true;state.offset=0;saveState(state);panel.hidden=!debugVisible;opening.classList.add('webgl-open');site.classList.remove('is-folded');site.inert=false;
     animate(1,()=>{foldButton.focus({preventScroll:true});});
   }
   function close() {
@@ -158,7 +208,7 @@ async function start() {
   }
   function scrollBy(delta){if(!open||busy)return;setScrollTarget(targetOffset+delta*(2/capture.width));}
   window.addEventListener('resize',resize);
-  openButton.addEventListener('click',show);skipButton.addEventListener('click',show);foldButton.hidden=false;foldButton.addEventListener('click',close);
+  openButton.addEventListener('click',show);foldButton.hidden=false;foldButton.addEventListener('click',close);
   document.querySelector('.ambience').addEventListener('click',e=>{if(open&&!e.target.closest('a')&&!hitScroll(e))close();});
   window.addEventListener('wheel',e=>{if(open&&!busy){e.preventDefault();scrollBy(e.deltaY * (e.deltaMode===1 ? 16 : e.deltaMode===2 ? innerHeight : 1));}}, {passive:false});
   let touchY=null;window.addEventListener('touchstart',e=>{if(open)touchY=e.touches[0].clientY;},{passive:true});
@@ -168,6 +218,7 @@ async function start() {
   document.querySelectorAll('.chapter-rail a').forEach(a=>a.addEventListener('click',e=>{e.preventDefault();const id=a.hash.slice(1);setScrollTarget((capture.sections[id]||0)*2/capture.width-viewportHeight*.12);}));
   // UV picking maps links to their original HTML coordinates.
   window.addEventListener('click',e=>{if(!open||busy||e.target.closest('a,button'))return;const hit=hitScroll(e);if(!hit?.uv)return;const x=hit.uv.x*capture.width,y=(1-hit.uv.y)*capture.height;const link=capture.links.find(l=>x>=l.x&&x<=l.x+l.width&&y>=l.y&&y<=l.y+l.height);if(link){if(link.href.startsWith('#')){setScrollTarget((capture.sections[link.href.slice(1)]||0)*2/capture.width);}else window.open(link.href,link.target||'_blank','noopener');}});
+  if(document.documentElement.classList.contains('reader-fallback')) { renderer.dispose(); canvas.remove(); panel.remove(); posePanel.remove(); return; }
   document.documentElement.classList.add('has-scroll-3d');site.classList.add('is-folded');site.inert=true;opening.hidden=false;
   resize();
   // Draw the closed geometry before revealing the canvas, avoiding a flash
@@ -184,4 +235,4 @@ async function start() {
     renderer.render(scene,camera);requestAnimationFrame(render);
   }render();
 }
-start().catch(error=>{console.error('3D scroll unavailable; using HTML reader',error);import(new URL('fallback.js', location.href).href).finally(()=>document.documentElement.classList.remove('scroll-loading'));});
+start().catch(error=>{console.error('3D scroll unavailable; using HTML reader',error);window.showReaderFallback();});
