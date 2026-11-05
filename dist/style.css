@@ -164,3 +164,6 @@ body{font-family:Literata,Georgia,serif;line-height:1.55}
 .texture-source h1{font-size:clamp(56px,calc(var(--vw,9.54px)*6),91px)}
 @media(max-width:699px){.texture-source .portrait{width:clamp(130px,calc(var(--vw,4px)*42),200px)}.texture-source .hero h1{font-size:clamp(40px,calc(var(--vw,4px)*11),58px)}}
 
+
+.socials{display:flex;justify-content:center;gap:14px;margin:14px 0 4px}.socials a{display:grid;place-items:center;width:38px;height:38px;border:1px solid #84603d;border-radius:50%;color:#84603d;text-decoration:none}.socials svg{width:20px;height:20px}
+.hero .socials{justify-content:flex-start}

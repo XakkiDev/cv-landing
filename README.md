@@ -20,7 +20,13 @@
 ![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat-square&logo=docker&logoColor=white)
 ![Kubernetes](https://img.shields.io/badge/Kubernetes-326CE5?style=flat-square&logo=kubernetes&logoColor=white)
 
-[✈ Телеграмма](https://t.me/xakki_dev) · [LinkedIn](https://www.linkedin.com/in/xakki) · [GitHub](https://github.com/Xakki) · [xakki.pro](https://xakki.pro)
+[![Telegram](https://img.shields.io/badge/Telegram-26A5E4?style=flat-square&logo=telegram&logoColor=white)](https://t.me/xakki_dev)
+[![X](https://img.shields.io/badge/X-@xakkidev-000000?style=flat-square&logo=x&logoColor=white)](https://x.com/xakkidev)
+[![YouTube](https://img.shields.io/badge/YouTube-@xakkidev-FF0000?style=flat-square&logo=youtube&logoColor=white)](https://www.youtube.com/@xakkidev)
+[![Instagram](https://img.shields.io/badge/Instagram-@xakkidev-E4405F?style=flat-square&logo=instagram&logoColor=white)](https://www.instagram.com/xakkidev/)
+[![LinkedIn](https://img.shields.io/badge/LinkedIn-xakki-0A66C2?style=flat-square&logo=linkedin&logoColor=white)](https://www.linkedin.com/in/xakki)
+[![GitHub](https://img.shields.io/badge/GitHub-Xakki-181717?style=flat-square&logo=github&logoColor=white)](https://github.com/Xakki)
+[![xakki.pro](https://img.shields.io/badge/xakki.pro-84603d?style=flat-square&logo=googlechrome&logoColor=white)](https://xakki.pro)
 
 <sub>Градъ Батꙋмь, землѧ Грꙋꙁїйска (часъ GMT+4) · Труждаюсѧ издалеча · Къ странствїю иногда готовъ</sub>
 
