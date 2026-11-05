@@ -1,8 +1,8 @@
 import * as THREE from 'three';
-import RAPIER from '@dimforge/rapier3d-compat';
-import html2canvas from 'html2canvas';
 import { scrollWindow, rollRadius } from './scroll-geometry.js';
 import { Scroll3D } from './scroll-mesh.js';
+import { capturePaper } from './paper-capture.js';
+import { bounceSamples } from './bounce.js';
 
 const clamp = THREE.MathUtils.clamp;
 const ease = t => t * t * (3 - 2 * t);
@@ -14,54 +14,25 @@ function readState() {
   } catch (_) {}
   return { broken: false, fragments: [], wasOpened: false, open: false, offset: 0 };
 }
-function saveState(state) { try { localStorage.setItem(stateKey, JSON.stringify(state)); } catch (_) {} }
-
-async function capturePaper(paper) {
-  await document.fonts.ready;
-  const copy = paper.cloneNode(true);
-  copy.removeAttribute('id'); copy.classList.add('texture-source');
-  // Wider spaces survive rasterization of the very long mobile texture.
-  // Only the visual clone changes; semantic HTML and accessible text stay intact.
-  if (innerWidth < 700) {
-    const walker=document.createTreeWalker(copy,NodeFilter.SHOW_TEXT);
-    const nodes=[]; while(walker.nextNode()) nodes.push(walker.currentNode);
-    for(const node of nodes) if(node.nodeValue.trim()) node.nodeValue=node.nodeValue.replace(/ (?=\S)/g,'\u2002');
-  }
-  const width = (innerWidth < 700 ? Math.max(1, innerWidth - 20) : Math.min(954, innerWidth - 32));
-  copy.style.width = width + 'px';
-  document.body.append(copy);
-  const height = copy.scrollHeight;
-  const leader = Math.round(width * .025);
-  // Stay below common WebGL max texture dimensions; keep aspect ratio.
-  const scale = Math.min(1.5, 8192 / (height + 2*leader), 4096 / width);
-  const links = [...copy.querySelectorAll('a[href]')].map(a => ({ href:a.getAttribute('href'), target:a.target, x:a.offsetLeft, y:0, width:0, height:0, element:a }));
-  const rootRect = copy.getBoundingClientRect();
-  links.forEach(l => {const r=l.element.getBoundingClientRect(); l.x=r.left-rootRect.left;l.y=r.top-rootRect.top;l.width=r.width;l.height=r.height;delete l.element;});
-  const sections = {};
-  for (const el of copy.querySelectorAll('[id]')) sections[el.id] = el.getBoundingClientRect().top-rootRect.top;
-  const canvas = await html2canvas(copy,{scale, backgroundColor:'#eee3ca', logging:false, useCORS:true, windowWidth:width, width, height});
-  copy.remove();
-  // Blank margins remain rolled up, so neither end becomes completely flat.
-  const padded = document.createElement('canvas'); padded.width=canvas.width; padded.height=Math.ceil((height+2*leader)*scale);
-  const ctx=padded.getContext('2d');ctx.fillStyle='#eee3ca';ctx.fillRect(0,0,padded.width,padded.height);ctx.drawImage(canvas,0,Math.round(leader*scale));
-  // A faint, uneven cup ring on the blank lower margin of the manuscript.
-  const ringX=padded.width*.79, ringY=padded.height-padded.width*.09, ringR=padded.width*.065;
-  ctx.save(); ctx.translate(ringX,ringY); ctx.rotate(-.16); ctx.scale(1,.82);
-  ctx.strokeStyle='rgba(111,65,33,.15)'; ctx.lineWidth=Math.max(1,3*scale);
-  ctx.beginPath();ctx.arc(0,0,ringR,.12,Math.PI*1.92);ctx.stroke();
-  ctx.strokeStyle='rgba(130,76,35,.08)';ctx.lineWidth=Math.max(1,1.5*scale);
-  ctx.beginPath();ctx.arc(2*scale,-scale,ringR*.95,.45,Math.PI*1.7);ctx.stroke();ctx.restore();
-  links.forEach(link => link.y += leader);
-  Object.keys(sections).forEach(key => sections[key] += leader);
-  const texture = new THREE.CanvasTexture(padded); texture.colorSpace = THREE.SRGBColorSpace; texture.anisotropy = 4;
-  return {texture,width,height:height+2*leader,leader,links,sections};
+const closedPoseKey = 'sluzhilaya-gramota:scroll:closed-pose:v1';
+const orientationKey = 'sluzhilaya-gramota:scroll:orientation:v1';
+/** Overlay the numbers the visitor saved onto `defaults`; unknown fields and non-finite values are ignored. */
+function readStored(key, defaults) {
+  try {
+    const saved = JSON.parse(localStorage.getItem(key));
+    if (saved && typeof saved === 'object') {
+      for (const field of Object.keys(defaults)) if (Number.isFinite(saved[field])) defaults[field] = saved[field];
+    }
+  } catch (_) {}
+  return defaults;
 }
+function writeStored(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); } catch (_) {} }
+function saveState(state) { try { localStorage.setItem(stateKey, JSON.stringify(state)); } catch (_) {} }
 
 async function start() {
   const paper = document.querySelector('.paper'), opening = document.querySelector('#opening'), site = document.querySelector('.site');
   const openButton = document.querySelector('#open-scroll'), skipButton = document.querySelector('#skip-opening'), foldButton = document.querySelector('#fold-scroll');
   const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
-  await RAPIER.init();
   const capture = await capturePaper(paper);
   const state = readState();
   state.open = false; state.offset = 0; saveState(state);
@@ -77,7 +48,7 @@ async function start() {
   let viewportHeight = 1.5, open = false, busy = false, fraction = 0, offset = 0, targetOffset = 0, animation = null, fallHeight = 0, closing = false, lastFrame = 0;
   // Temporary orientation tool: rotations are in radians, UI reports degrees.
   const defaultOrientation = { x: THREE.MathUtils.degToRad(8), y: THREE.MathUtils.degToRad(8), z: 0 };
-  const orientation = { ...defaultOrientation };
+  const orientation = readStored(orientationKey, { ...defaultOrientation });
   const panel = document.createElement('aside');
   panel.className = 'rotation-panel'; panel.hidden = true;
   panel.setAttribute('aria-label', 'Поворот грамоты');
@@ -92,7 +63,7 @@ async function start() {
     if(button.dataset.reset) { Object.assign(orientation, defaultOrientation); showAngles(); update(); }
     else if(button.dataset.axis) setOrientation(button.dataset.axis, orientation[button.dataset.axis] + Number(button.dataset.step) * Math.PI / 60);
   });
-  const closedPose = {x:.0121,y:.3028,rx:19*Math.PI/180,ry:-27.5*Math.PI/180,rz:-2.4*Math.PI/180,scale:.495};
+  const closedPose = readStored(closedPoseKey,{x:.0121,y:.3028,rx:19*Math.PI/180,ry:-27.5*Math.PI/180,rz:-2.4*Math.PI/180,scale:.495});
   let debugVisible=false;
   document.querySelector('#debug-toggle').addEventListener('click',()=>{debugVisible=!debugVisible; panel.hidden=!debugVisible||!open;posePanel.hidden=!debugVisible||open;});
   const posePanel=document.createElement('aside');posePanel.className='rotation-panel closed-pose-panel';
@@ -120,7 +91,7 @@ async function start() {
     else {orientation.y=clamp(orientation.y+dx*.002,-.7,.7);orientation.x=clamp(orientation.x+dy*.002,-.7,.7);}
     showAngles();update();event.preventDefault();
   });
-  window.addEventListener('pointerup', event => { if(drag?.id===event.pointerId){drag=null;setTimeout(()=>suppressContext=false,500);} });
+  window.addEventListener('pointerup', event => { if(drag?.id===event.pointerId){if(open)writeStored(orientationKey,orientation);else writeStored(closedPoseKey,closedPose);drag=null;setTimeout(()=>suppressContext=false,500);} });
   window.addEventListener('pointercancel',()=>{drag=null;suppressContext=false;});
   window.addEventListener('contextmenu', event => {if(suppressContext || (!open || hitScroll(event)))event.preventDefault();});
   const ray=new THREE.Raycaster(),pointer=new THREE.Vector2();
@@ -189,13 +160,7 @@ async function start() {
     if(busy||!open)return;open=false;targetOffset=offset;panel.hidden=true;closing=!reduced;state.open=false;state.offset=0;saveState(state);site.inert=true;site.classList.add('is-folded');
     animate(0,()=>{
       if (reduced) {offset=0;opening.classList.remove('webgl-open');openButton.focus({preventScroll:true});return;}
-      // Pre-simulate one small rigid body drop, then play those samples without a live world.
-      const world=new RAPIER.World({x:0,y:-9.81,z:0});
-      const ground=world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(0,-.05,0));
-      world.createCollider(RAPIER.ColliderDesc.cuboid(3,.05,1).setRestitution(.22),ground);
-      const body=world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(0,.65,0));
-      world.createCollider(RAPIER.ColliderDesc.ball(.06).setRestitution(.22),body);
-      const samples=[];for(let i=0;i<100;i++){world.step();samples.push(Math.max(0,body.translation().y-.06));}world.free();
+      const samples=bounceSamples();
       const started=performance.now();busy=true;closing=false;
       function drop(now){const i=Math.min(samples.length-1,Math.floor((now-started)/1000*60));fallHeight=samples[i];update();if(i<samples.length-1)requestAnimationFrame(drop);else{fallHeight=0;offset=0;busy=false;update();opening.classList.remove('webgl-open');openButton.focus({preventScroll:true});}}
       requestAnimationFrame(drop);
@@ -216,8 +181,43 @@ async function start() {
   window.addEventListener('touchend',()=>touchY=null,{passive:true});
   document.addEventListener('keydown',e=>{if(!open)return;if(e.key==='Escape'){close();return;}let d=0;if(e.key==='ArrowDown')d=60;if(e.key==='ArrowUp')d=-60;if(e.key==='PageDown'||e.key===' ')d=innerHeight*.7;if(e.key==='PageUp')d=-innerHeight*.7;if(d){e.preventDefault();scrollBy(d);}});
   document.querySelectorAll('.chapter-rail a').forEach(a=>a.addEventListener('click',e=>{e.preventDefault();const id=a.hash.slice(1);setScrollTarget((capture.sections[id]||0)*2/capture.width-viewportHeight*.12);}));
-  // UV picking maps links to their original HTML coordinates.
-  window.addEventListener('click',e=>{if(!open||busy||e.target.closest('a,button'))return;const hit=hitScroll(e);if(!hit?.uv)return;const x=hit.uv.x*capture.width,y=(1-hit.uv.y)*capture.height;const link=capture.links.find(l=>x>=l.x&&x<=l.x+l.width&&y>=l.y&&y<=l.y+l.height);if(link){if(link.href.startsWith('#')){setScrollTarget((capture.sections[link.href.slice(1)]||0)*2/capture.width);}else window.open(link.href,link.target||'_blank','noopener');}});
+  // The sheet is only a texture, so links are found by ray-casting the pointer onto the mesh
+  // and mapping the UV hit back to the link rectangles measured in the source HTML.
+  function linkAt(event) {
+    if(isControl(event))return null;
+    const hit=hitScroll(event);
+    if(!hit?.uv||hit.object!==scroll.paper)return null;
+    const x=hit.uv.x*capture.width,y=(1-hit.uv.y)*capture.height;
+    return capture.links.find(l=>x>=l.x&&x<=l.x+l.width&&y>=l.y&&y<=l.y+l.height)||null;
+  }
+  // The chest link sits under the scroll, so it is hit-tested here after the scroll itself.
+  const chestLink=document.querySelector('.chest-link');
+  function overChest(event) {
+    const r=chestLink.getBoundingClientRect();
+    return event.clientX>=r.left&&event.clientX<=r.right&&event.clientY>=r.top&&event.clientY<=r.bottom;
+  }
+  const isControl=event=>event.target.closest('button,a,.rotation-panel,.chapter-rail,.mobile-chest');
+  // What a click at this point would do: follow a sheet link, unroll the closed scroll, or open the chest link.
+  function actionAt(event) {
+    if(busy)return null;
+    if(open){
+      const link=linkAt(event);
+      if(!link)return null;
+      return link.href.startsWith('#')
+        ?()=>setScrollTarget((capture.sections[link.href.slice(1)]||0)*2/capture.width)
+        :()=>window.open(link.href,'_blank','noopener');
+    }
+    if(isControl(event))return null;
+    if(hitScroll(event))return show;
+    return overChest(event)?()=>window.open(chestLink.href,'_blank','noopener'):null;
+  }
+  window.addEventListener('click',e=>actionAt(e)?.());
+  let hovering=false;
+  window.addEventListener('pointermove',e=>{
+    if(drag)return;
+    const over=!!actionAt(e);
+    if(over!==hovering){hovering=over;document.documentElement.style.cursor=over?'pointer':'';}
+  });
   if(document.documentElement.classList.contains('reader-fallback')) { renderer.dispose(); canvas.remove(); panel.remove(); posePanel.remove(); return; }
   document.documentElement.classList.add('has-scroll-3d');site.classList.add('is-folded');site.inert=true;opening.hidden=false;
   resize();

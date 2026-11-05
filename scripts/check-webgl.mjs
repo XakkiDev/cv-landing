@@ -37,9 +37,10 @@ try {
   await page.goto(url, {waitUntil:'domcontentloaded'});
   const initial = await page.evaluate(() => ({loading:document.documentElement.classList.contains('scroll-loading'), siteVisible:getComputedStyle(document.querySelector('.site')).visibility}));
   if(initial.loading) assert.equal(initial.siteVisible, 'hidden', 'Document must stay hidden while the 3D scene loads');
-  await page.waitForFunction(() => document.documentElement.classList.contains('has-scroll-3d') || document.documentElement.classList.contains('has-scroll-simulation'), null, {timeout:60000});
+  await page.waitForFunction(() => document.documentElement.classList.contains('has-scroll-3d'), null, {timeout:60000});
   await page.screenshot({path:path.join(output,'01-closed.png')});
   assert.ok(await page.locator('html.has-scroll-3d').count(), '3D scene did not initialize; see captured console errors');
+  await page.evaluate(() => document.querySelector('#debug-toggle').click()); // the rotation panel is a debug aid, hidden by default
   await page.getByRole('button',{name:'Развернуть служилую грамоту'}).click();
   await page.waitForTimeout(220); await page.screenshot({path:path.join(output,'02-opening.png')});
   await page.waitForTimeout(400); await page.screenshot({path:path.join(output,'03-opening.png')});
@@ -72,7 +73,7 @@ try {
   saved = await page.evaluate(key => JSON.parse(localStorage.getItem(key)),stateKey);
   assert.equal(saved.open, false, 'Reload must return to folded state');
   assert.equal(saved.offset, 0, 'Reload must reset scroll offset');
-  assert.equal(await page.locator('.rotation-panel').isVisible(), false, 'Rotation controls must be hidden while folded');
+  assert.equal(await page.locator('.rotation-panel:not(.closed-pose-panel)').isVisible(), false, 'Rotation controls must be hidden while folded');
   await page.screenshot({path:path.join(output,'06-reloaded-closed.png')});
   await page.getByRole('button',{name:'Развернуть служилую грамоту'}).click();
   await page.waitForTimeout(1800);
